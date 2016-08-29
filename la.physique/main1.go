@@ -1,5 +1,5 @@
 // Application publishes REST API to perform basic arithmetic operations using different HTTP methods
-// It uses http.ServeMux (why it is named Mux?)
+// It uses http.ServeMux (why it is named Mux? Multiplexer?)
 package main
 
 import (
