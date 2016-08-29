@@ -46,11 +46,13 @@ func doOperation(respWriter http.ResponseWriter, request *http.Request, operatio
 	if err != nil {
 		respWriter.WriteHeader(http.StatusBadRequest)
 		respWriter.Write([]byte("Invalid argument X"))
+		return
 	}
 	y, err := strconv.ParseInt(yStr, 0, 0)
 	if err != nil {
 		respWriter.WriteHeader(http.StatusBadRequest)
 		respWriter.Write([]byte("Invalid argument Y"))
+		return
 	}
 	var result int64
 	switch operation {
@@ -82,5 +84,4 @@ func main() {
 	if err != nil {
 		println(err.Error())
 	}
-	accessLogFile.Close()
 }
