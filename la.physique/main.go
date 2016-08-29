@@ -1,5 +1,6 @@
 // Application publishes REST API to perform basic arithmetic operations using different HTTP methods
-package main
+// It uses http.Server
+package main1
 
 import (
 	"fmt"
@@ -47,6 +48,7 @@ func (rd requestDispatcher) ServeHTTP(respWriter http.ResponseWriter, request *h
 	if !exists {
 		rd.defaultHandler(respWriter, request)
 	} else {
+		// Question: I would like to handle request in separate goroutine. But if I add key word go before the function call, it will stop to work :-(
 		handlerFunc(respWriter, request)
 	}
 }
