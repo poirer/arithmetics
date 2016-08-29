@@ -1,5 +1,4 @@
-// Application publishes REST API to help memorize foreign words
-// It allows to keep a word and its translations; the basic CRUD operations are available
+// Application publishes REST API to perform basic arithmetic operations using different HTTP methods
 package main
 
 import (
