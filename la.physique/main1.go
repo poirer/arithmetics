@@ -1,11 +1,30 @@
 // Application publishes REST API to perform basic arithmetic operations using different HTTP methods
-// It uses http.ServeMux (why it is named Mux? Multiplexer?)
+// It uses http.ServeMux and middleware
 package main
 
 import (
 	"net/http"
 	"strconv"
+	"os"
+	"fmt"
 )
+
+var (
+	accessLogFile *os.File
+)
+
+func init() {
+	err := os.MkdirAll("logs", 0777)
+	if err != nil {
+		println("Cannot create folder for logs")
+		panic(err)
+	}
+	accessLogFile, err = os.Create("logs/access.log")
+	if err != nil {
+		println("Cannot create access log file")
+	}
+}
+
 
 func add(respWriter http.ResponseWriter, request *http.Request) {
 	if request.Method == http.MethodPost {
@@ -73,13 +92,19 @@ func invalidMethod(respWriter http.ResponseWriter, request *http.Request) {
 	respWriter.Write([]byte("Method " + request.Method + " is not allowed for this path"))
 }
 
+func logMiddlewareFunc(mainHandler http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func (respWriter http.ResponseWriter, request *http.Request) {
+		accessLogFile.WriteString(fmt.Sprintf("Method: %s, path: %s\n", request.Method, request.URL.Path))
+		mainHandler.ServeHTTP(respWriter, request)
+	})
+}
+
 func main() {
-	// Question: Don't know yet how to add pre-handler to log all requests...
 	var serverMux = http.NewServeMux()
-	serverMux.HandleFunc("/add", add)
-	serverMux.HandleFunc("/substract", substract)
-	serverMux.HandleFunc("/divide", divide)
-	serverMux.HandleFunc("/multiply", multiply)
+	serverMux.HandleFunc("/add", logMiddlewareFunc(add))
+	serverMux.HandleFunc("/substract", logMiddlewareFunc(substract))
+	serverMux.HandleFunc("/divide", logMiddlewareFunc(divide))
+	serverMux.HandleFunc("/multiply", logMiddlewareFunc(multiply))
 	err := http.ListenAndServe(":8083", serverMux)
 	if err != nil {
 		println(err.Error())
