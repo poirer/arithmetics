@@ -1,5 +1,5 @@
 // Application publishes REST API to perform basic arithmetic operations using different HTTP methods
-// It uses http.ServeMux and middleware
+// It uses http.ServeMux and middleware. There is no special tests, standart REST client was used to verify
 package main
 
 import (
