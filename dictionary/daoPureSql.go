@@ -3,9 +3,10 @@ package main
 
 import (
 	"database/sql"
-	"log"
-	_ "github.com/mattn/go-sqlite3"
 	"errors"
+	"log"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func connect(dbUrl string) *sql.DB {
@@ -145,7 +146,7 @@ func getDictEntry(db *sql.DB, user, word string) (*dictionaryEntry, error) {
 	}
 	defer rows.Close()
 	var w, t, i string
-	var entry = NewDictEntry()
+	var entry = newDictEntry()
 	for rows.Next() {
 		err := rows.Scan(&w, &t, &i)
 		if err != nil {
@@ -159,6 +160,22 @@ func getDictEntry(db *sql.DB, user, word string) (*dictionaryEntry, error) {
 		addIfAbsent(&entry.Idioms, i)
 	}
 	return entry, nil
+}
+
+func retrieveUsers(db *sql.DB) ([]string, error) {
+	rows, err := db.Query("select distinct owner from Words")
+	if err != nil {
+		log.Println("Cannot retrieve users", err)
+		return nil, err
+	}
+	defer rows.Close()
+	var result = make([]string, 0, 10)
+	for rows.Next() {
+		var u string
+		rows.Scan(&u)
+		result = append(result, u)
+	}
+	return result, nil
 }
 
 func addIfAbsent(slice *[]string, token string) {

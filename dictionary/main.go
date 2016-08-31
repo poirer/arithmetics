@@ -3,9 +3,12 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"github.com/labstack/echo"
-	"github.com/labstack/echo/engine/standard"
 	"net/http"
+	"time"
+
+	"github.com/labstack/echo"
+	"github.com/labstack/echo/engine"
+	"github.com/labstack/echo/engine/standard"
 )
 
 type dictionaryEntry struct {
@@ -17,7 +20,7 @@ type dictionaryEntry struct {
 var db *sql.DB
 
 // Creates new instance of dictionaryEntry and initializes its fields
-func NewDictEntry() *dictionaryEntry {
+func newDictEntry() *dictionaryEntry {
 	var de = new(dictionaryEntry)
 	de.Idioms = make([]string, 0, 10)
 	de.Translations = make([]string, 0, 10)
@@ -25,7 +28,7 @@ func NewDictEntry() *dictionaryEntry {
 }
 
 func addWord(c echo.Context) error {
-	var dictEntry = NewDictEntry()
+	var dictEntry = newDictEntry()
 	c.Bind(dictEntry)
 	var user = c.Request().Header().Get("User")
 	err := addDictEntry(db, user, *dictEntry)
@@ -36,7 +39,7 @@ func addWord(c echo.Context) error {
 }
 
 func updateWord(c echo.Context) error {
-	var dictEntry = NewDictEntry()
+	var dictEntry = newDictEntry()
 	c.Bind(dictEntry)
 	var user = c.Request().Header().Get("User")
 	err := updateDictEntry(db, user, *dictEntry)
@@ -76,14 +79,32 @@ func loadAllWords(c echo.Context) error {
 	return c.JSON(http.StatusOK, words)
 }
 
+func getUsers(c echo.Context) error {
+	users, err := retrieveUsers(db)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+	}
+	return c.JSON(http.StatusOK, users)
+}
+
 func main() {
-	db = connect("/home/zhenya/Development/go-test-data/dict")
+	db = connect("/home/zhenya/Development/task-data/words.db")
 	defer db.Close()
-	var e *echo.Echo = echo.New()
-	e.POST("/word", addWord)
-	e.PUT("/word", updateWord)
-	e.DELETE("/word/:w", deleteWord)
-	e.GET("/word/:w", findWord)
-	e.GET("/word", loadAllWords)
-	e.Run(standard.New(":8083"))
+	var mainEndpoint *echo.Echo = echo.New()
+	mainEndpoint.POST("/word", addWord)
+	mainEndpoint.PUT("/word", updateWord)
+	mainEndpoint.DELETE("/word/:w", deleteWord)
+	mainEndpoint.GET("/word/:w", findWord)
+	mainEndpoint.GET("/word", loadAllWords)
+	go mainEndpoint.Run(standard.New(":8083"))
+	var secureEndpoint = echo.New()
+	secureEndpoint.GET("/user", getUsers)
+	var conf engine.Config = engine.Config{
+		Address:      ":8483",
+		TLSCertFile:  "cert.pem",
+		TLSKeyFile:   "key.pem",
+		ReadTimeout:  time.Second * 5,
+		WriteTimeout: time.Second * 5,
+	}
+	secureEndpoint.Run(standard.WithConfig(conf))
 }
