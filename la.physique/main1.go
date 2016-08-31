@@ -3,10 +3,10 @@
 package main
 
 import (
-	"net/http"
-	"strconv"
-	"os"
 	"fmt"
+	"net/http"
+	"os"
+	"strconv"
 )
 
 var (
@@ -24,7 +24,6 @@ func init() {
 		println("Cannot create access log file")
 	}
 }
-
 
 func add(respWriter http.ResponseWriter, request *http.Request) {
 	if request.Method == http.MethodPost {
@@ -93,10 +92,10 @@ func invalidMethod(respWriter http.ResponseWriter, request *http.Request) {
 }
 
 func logMiddlewareFunc(mainHandler http.HandlerFunc) http.HandlerFunc {
-	return http.HandlerFunc(func (respWriter http.ResponseWriter, request *http.Request) {
+	return func(respWriter http.ResponseWriter, request *http.Request) {
 		accessLogFile.WriteString(fmt.Sprintf("Method: %s, path: %s\n", request.Method, request.URL.Path))
 		mainHandler.ServeHTTP(respWriter, request)
-	})
+	}
 }
 
 func main() {
