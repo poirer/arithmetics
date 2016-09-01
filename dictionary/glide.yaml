@@ -5,3 +5,4 @@ import:
   - engine
   - engine/standard
 - package: github.com/mattn/go-sqlite3
+- package: github.com/Clever/leakybucket
