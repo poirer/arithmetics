@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -18,6 +17,9 @@ type (
 		Word         string
 		Translations []string
 		Idioms       []string
+	}
+	errorWrapper struct {
+		Error string `json:"error"`
 	}
 )
 
@@ -49,7 +51,7 @@ func addWord(c echo.Context) error {
 	var user = c.Request().Header().Get("User")
 	err := wordsDb.addDictEntry(user, *dictEntry)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.NoContent(http.StatusCreated)
 }
@@ -60,7 +62,7 @@ func updateWord(c echo.Context) error {
 	var user = c.Request().Header().Get("User")
 	err := wordsDb.updateDictEntry(user, *dictEntry)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.NoContent(http.StatusOK)
 }
@@ -71,7 +73,7 @@ func deleteWord(c echo.Context) error {
 	var de = dictionaryEntry{word, []string{}, []string{}}
 	err := wordsDb.deleteDictEntry(user, de)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -81,7 +83,7 @@ func findWord(c echo.Context) error {
 	var user = c.Request().Header().Get("User")
 	de, err := wordsDb.getDictEntry(user, word)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.JSON(http.StatusOK, de)
 }
@@ -90,7 +92,7 @@ func loadAllWords(c echo.Context) error {
 	var user = c.Request().Header().Get("User")
 	words, err := wordsDb.getAllWords(user)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.JSON(http.StatusOK, words)
 }
@@ -98,7 +100,7 @@ func loadAllWords(c echo.Context) error {
 func getUsers(c echo.Context) error {
 	users, err := userDb.retrieveUsers()
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.JSON(http.StatusOK, users)
 }
