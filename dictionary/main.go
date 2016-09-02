@@ -13,13 +13,27 @@ import (
 	"github.com/Clever/leakybucket/memory"
 )
 
-type dictionaryEntry struct {
-	Word         string
-	Translations []string
-	Idioms       []string
-}
+type (
+	dictionaryEntry struct {
+		Word         string
+		Translations []string
+		Idioms       []string
+	}
+)
 
-var db dao
+var (
+	wordsDb wordsDao
+	userDb  userDao
+	dbConn  connectable
+)
+
+func initDb() {
+	var dao = new(daoImpl)
+	wordsDb = dao
+	userDb = dao
+	dbConn = dao
+	dbConn.connect("/home/zhenya/Development/task-data/words.db")
+}
 
 // Creates new instance of dictionaryEntry and initializes its fields
 func newDictEntry() *dictionaryEntry {
@@ -33,7 +47,7 @@ func addWord(c echo.Context) error {
 	var dictEntry = newDictEntry()
 	c.Bind(dictEntry)
 	var user = c.Request().Header().Get("User")
-	err := db.addDictEntry(user, *dictEntry)
+	err := wordsDb.addDictEntry(user, *dictEntry)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
 	}
@@ -44,7 +58,7 @@ func updateWord(c echo.Context) error {
 	var dictEntry = newDictEntry()
 	c.Bind(dictEntry)
 	var user = c.Request().Header().Get("User")
-	err := db.updateDictEntry(user, *dictEntry)
+	err := wordsDb.updateDictEntry(user, *dictEntry)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
 	}
@@ -55,7 +69,7 @@ func deleteWord(c echo.Context) error {
 	var word = c.Param("w")
 	var user = c.Request().Header().Get("User")
 	var de = dictionaryEntry{word, []string{}, []string{}}
-	err := db.deleteDictEntry(user, de)
+	err := wordsDb.deleteDictEntry(user, de)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
 	}
@@ -65,7 +79,7 @@ func deleteWord(c echo.Context) error {
 func findWord(c echo.Context) error {
 	var word = c.Param("w")
 	var user = c.Request().Header().Get("User")
-	de, err := db.getDictEntry(user, word)
+	de, err := wordsDb.getDictEntry(user, word)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
 	}
@@ -74,7 +88,7 @@ func findWord(c echo.Context) error {
 
 func loadAllWords(c echo.Context) error {
 	var user = c.Request().Header().Get("User")
-	words, err := db.getAllWords(user)
+	words, err := wordsDb.getAllWords(user)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
 	}
@@ -82,7 +96,7 @@ func loadAllWords(c echo.Context) error {
 }
 
 func getUsers(c echo.Context) error {
-	users, err := db.retrieveUsers()
+	users, err := userDb.retrieveUsers()
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
 	}
@@ -110,9 +124,8 @@ func limitRequest(filter leakybucket.Bucket) func(mainHandler echo.HandlerFunc) 
 }
 
 func main() {
-	db = new(daoImpl)
-	db.connect("/home/zhenya/Development/task-data/words.db")
-	defer db.close()
+	initDb()
+	defer dbConn.close()
 	var storage = memory.New()
 	var filter, err = storage.Create("Request Filter", 5, time.Second*5)
 	if err != nil {

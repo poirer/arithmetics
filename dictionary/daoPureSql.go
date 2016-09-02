@@ -9,15 +9,21 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type dao interface {
+type connectable interface {
 	connect(dbURL string)
 	close() error
+}
+
+type wordsDao interface {
 	addDictEntry(user string, dictEntry dictionaryEntry) error
 	updateDictEntry(user string, dictEntry dictionaryEntry) error
 	deleteDictEntry(user string, dictEntry dictionaryEntry) error
 	checkTranslation(user, word, translation string) (bool, error)
 	getAllWords(user string) ([]string, error)
 	getDictEntry(user, word string) (*dictionaryEntry, error)
+}
+
+type userDao interface {
 	retrieveUsers() ([]string, error)
 }
 

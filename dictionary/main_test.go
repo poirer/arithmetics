@@ -23,7 +23,7 @@ func TestAddWord(t *testing.T) {
 		t.Error(err.Error())
 		t.Fail()
 	}
-	db = new(mockDao)
+	wordsDb = new(mockDao)
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	recorder := httptest.NewRecorder()
 	cont := e.NewContext(standard.NewRequest(req, e.Logger()), standard.NewResponse(recorder, e.Logger()))
@@ -44,7 +44,7 @@ func TestAddWord(t *testing.T) {
 
 func TestRateLimiter(t *testing.T) {
 	e := echo.New()
-	db = new(mockDao)
+	wordsDb = new(mockDao)
 	var storage = memory.New()
 	var filter, err = storage.Create("Request Filter", 5, time.Second*5)
 	if err != nil {
@@ -80,13 +80,6 @@ func TestRateLimiter(t *testing.T) {
 	}
 }
 
-func (di *mockDao) connect(dbURL string) {
-}
-
-func (di *mockDao) close() error {
-	return nil
-}
-
 func (di *mockDao) addDictEntry(user string, dictEntry dictionaryEntry) error {
 	return nil
 }
@@ -112,8 +105,4 @@ func (di *mockDao) getDictEntry(user, word string) (*dictionaryEntry, error) {
 	entry.Word = "Hello"
 	entry.Translations = append(entry.Translations, "Salut")
 	return entry, nil
-}
-
-func (di *mockDao) retrieveUsers() ([]string, error) {
-	return []string{"zhenya", "gouser"}, nil
 }
