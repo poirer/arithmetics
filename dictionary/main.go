@@ -8,8 +8,11 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/engine/standard"
 
-	"github.com/Clever/leakybucket"
+	meterBucket "github.com/Clever/leakybucket"
 	"github.com/Clever/leakybucket/memory"
+
+	flowBucket "github.com/imormo/leakyBucket"
+	"fmt"
 )
 
 type (
@@ -125,20 +128,38 @@ func limitRequest(filter leakybucket.Bucket) func(mainHandler echo.HandlerFunc) 
 	}
 }
 
+var flowLeackyBucket flowBucket.LeakyBucket
+
+func queueRequest(c echo.Context) error {
+	err := flowLeackyBucket.Add(struct{})
+	if err != nil {
+		log.Println("Bucket is full")
+		return c.String(http.StatusServiceUnavailable, "Too many requests")
+	}
+	return c.NoContent(http.StatusAccepted)
+}
+
+func flowBucketRequestHandler(m interface{}) (err error) {
+	fmt.Println("Handled")
+	return nil
+}
+
 func main() {
 	initDb()
 	defer dbConn.close()
 	var storage = memory.New()
-	var filter, err = storage.Create("Request Filter", 5, time.Second*5)
+	var meterLeackyBucket, err = storage.Create("Request Filter", 5, time.Second*5)
 	if err != nil {
 		log.Fatal("Cannot create rate limiter", err)
 	}
+	flowLeackyBucket = flowBucket.NewLeakyBucket(10, 5, flowBucketRequestHandler)
 	var mainEndpoint = echo.New()
-	mainEndpoint.Use(limitRequest(filter))
+	mainEndpoint.Use(limitRequest(meterLeackyBucket))
 	mainEndpoint.POST("/word", addWord)
 	mainEndpoint.PUT("/word", updateWord)
 	mainEndpoint.DELETE("/word/:w", deleteWord)
 	mainEndpoint.GET("/word/:w", findWord)
 	mainEndpoint.GET("/word", loadAllWords)
+	mainEndpoint.GET("/queue", queueRequest)
 	mainEndpoint.Run(standard.New(":8083"))
 }
