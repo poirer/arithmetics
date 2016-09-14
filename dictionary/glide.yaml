@@ -1,0 +1,7 @@
+package: github.com/dictionary
+import:
+- package: github.com/labstack/echo
+  subpackages:
+  - engine
+  - engine/standard
+- package: github.com/mattn/go-sqlite3
