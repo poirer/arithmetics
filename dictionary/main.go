@@ -1,23 +1,45 @@
 package main
 
 import (
-	"database/sql"
-	"fmt"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/labstack/echo"
-	"github.com/labstack/echo/engine"
 	"github.com/labstack/echo/engine/standard"
+
+	"github.com/Clever/leakybucket"
+	"github.com/Clever/leakybucket/memory"
+
+	"fmt"
+
+	flowBucket "github.com/apg/bucket"
 )
 
-type dictionaryEntry struct {
-	Word         string
-	Translations []string
-	Idioms       []string
-}
+type (
+	dictionaryEntry struct {
+		Word         string
+		Translations []string
+		Idioms       []string
+	}
+	errorWrapper struct {
+		Error string `json:"error"`
+	}
+)
 
-var db *sql.DB
+var (
+	wordsDb wordsDao
+	userDb  userDao
+	dbConn  connectable
+)
+
+func initDb() {
+	var dao = new(daoImpl)
+	wordsDb = dao
+	userDb = dao
+	dbConn = dao
+	dbConn.connect("/home/zhenya/Development/task-data/words.db")
+}
 
 // Creates new instance of dictionaryEntry and initializes its fields
 func newDictEntry() *dictionaryEntry {
@@ -31,9 +53,9 @@ func addWord(c echo.Context) error {
 	var dictEntry = newDictEntry()
 	c.Bind(dictEntry)
 	var user = c.Request().Header().Get("User")
-	err := addDictEntry(db, user, *dictEntry)
+	err := wordsDb.addDictEntry(user, *dictEntry)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.NoContent(http.StatusCreated)
 }
@@ -42,9 +64,9 @@ func updateWord(c echo.Context) error {
 	var dictEntry = newDictEntry()
 	c.Bind(dictEntry)
 	var user = c.Request().Header().Get("User")
-	err := updateDictEntry(db, user, *dictEntry)
+	err := wordsDb.updateDictEntry(user, *dictEntry)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.NoContent(http.StatusOK)
 }
@@ -53,9 +75,9 @@ func deleteWord(c echo.Context) error {
 	var word = c.Param("w")
 	var user = c.Request().Header().Get("User")
 	var de = dictionaryEntry{word, []string{}, []string{}}
-	err := deleteDictEntry(db, user, de)
+	err := wordsDb.deleteDictEntry(user, de)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -63,48 +85,89 @@ func deleteWord(c echo.Context) error {
 func findWord(c echo.Context) error {
 	var word = c.Param("w")
 	var user = c.Request().Header().Get("User")
-	de, err := getDictEntry(db, user, word)
+	de, err := wordsDb.getDictEntry(user, word)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.JSON(http.StatusOK, de)
 }
 
 func loadAllWords(c echo.Context) error {
 	var user = c.Request().Header().Get("User")
-	words, err := getAllWords(db, user)
+	words, err := wordsDb.getAllWords(user)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.JSON(http.StatusOK, words)
 }
 
 func getUsers(c echo.Context) error {
-	users, err := retrieveUsers(db)
+	users, err := userDb.retrieveUsers()
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, fmt.Sprintf("{\"error\" : \"%s\"}", err.Error()))
+		return c.JSON(http.StatusBadRequest, errorWrapper{err.Error()})
 	}
 	return c.JSON(http.StatusOK, users)
 }
 
+func truncateRequest(c echo.Context) error {
+	return c.String(http.StatusServiceUnavailable, "Too many requests")
+}
+
+func limitRequest(filter leakybucket.Bucket) func(mainHandler echo.HandlerFunc) echo.HandlerFunc {
+	return func(mainHandler echo.HandlerFunc) echo.HandlerFunc {
+		state, err := filter.Add(1)
+		if err == leakybucket.ErrorFull {
+			log.Println("Bucket is full", state)
+			return truncateRequest
+		} else if err != nil {
+			log.Println("Unexpected error", err)
+			return nil
+		}
+		return func(c echo.Context) error {
+			return mainHandler(c)
+		}
+	}
+}
+
+var flowLeackyBucket flowBucket.Bucket
+
+func queueRequest(c echo.Context) error {
+	err := flowLeackyBucket.Put(time.Now())
+	if err == flowBucket.ErrFull {
+		log.Println("Bucket is full")
+		return c.String(http.StatusServiceUnavailable, "Too many requests")
+	} else if err != nil {
+		return c.NoContent(http.StatusInternalServerError)
+	}
+	return c.NoContent(http.StatusAccepted)
+}
+
+func flowBucketProcessor() {
+	for {
+		m := <-flowLeackyBucket.C()
+		var t = m.(time.Time)
+		var ct = time.Now()
+		fmt.Printf("Event time: %s, current time: %s\n", t.Format("04:05.9"), ct.Format("04:05.9"))
+	}
+}
+
 func main() {
-	db = connect("/home/zhenya/Development/task-data/words.db")
-	defer db.Close()
-	var mainEndpoint *echo.Echo = echo.New()
+	initDb()
+	defer dbConn.close()
+	var storage = memory.New()
+	var meterLeackyBucket, err = storage.Create("Request Filter", 5, time.Second*5)
+	if err != nil {
+		log.Fatal("Cannot create rate limiter", err)
+	}
+	flowLeackyBucket = flowBucket.NewLeakyBucket(5, 2*time.Second)
+	go flowBucketProcessor()
+	var mainEndpoint = echo.New()
+	mainEndpoint.Use(limitRequest(meterLeackyBucket))
 	mainEndpoint.POST("/word", addWord)
 	mainEndpoint.PUT("/word", updateWord)
 	mainEndpoint.DELETE("/word/:w", deleteWord)
 	mainEndpoint.GET("/word/:w", findWord)
 	mainEndpoint.GET("/word", loadAllWords)
-	go mainEndpoint.Run(standard.New(":8083"))
-	var secureEndpoint = echo.New()
-	secureEndpoint.GET("/user", getUsers)
-	var conf engine.Config = engine.Config{
-		Address:      ":8483",
-		TLSCertFile:  "cert.pem",
-		TLSKeyFile:   "key.pem",
-		ReadTimeout:  time.Second * 5,
-		WriteTimeout: time.Second * 5,
-	}
-	secureEndpoint.Run(standard.WithConfig(conf))
+	mainEndpoint.GET("/flow", queueRequest)
+	mainEndpoint.Run(standard.New(":8083"))
 }

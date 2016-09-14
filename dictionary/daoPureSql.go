@@ -9,42 +9,68 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func connect(dbUrl string) *sql.DB {
-	db, err := sql.Open("sqlite3", dbUrl)
+type connectable interface {
+	connect(dbURL string)
+	close() error
+}
+
+type wordsDao interface {
+	addDictEntry(user string, dictEntry dictionaryEntry) error
+	updateDictEntry(user string, dictEntry dictionaryEntry) error
+	deleteDictEntry(user string, dictEntry dictionaryEntry) error
+	checkTranslation(user, word, translation string) (bool, error)
+	getAllWords(user string) ([]string, error)
+	getDictEntry(user, word string) (*dictionaryEntry, error)
+}
+
+type userDao interface {
+	retrieveUsers() ([]string, error)
+}
+
+type daoImpl struct {
+	db *sql.DB
+}
+
+func (di *daoImpl) connect(dbURL string) {
+	var err error
+	di.db, err = sql.Open("sqlite3", dbURL)
 	if err != nil {
 		log.Fatal("Cannot connect to database", err)
 	}
-	return db
 }
 
-func findWordId(db *sql.DB, user, word string) (int, error) {
+func (di *daoImpl) close() error {
+	return di.db.Close()
+}
+
+func findWordID(db *sql.DB, user, word string) (int, error) {
 	var id int
-	var row *sql.Row = db.QueryRow("select id from Words where word = ? and owner = ?", word, user)
+	var row = db.QueryRow("select id from Words where word = ? and owner = ?", word, user)
 	err := row.Scan(&id)
 	return id, err
 }
 
-func addDictEntry(db *sql.DB, user string, dictEntry dictionaryEntry) error {
+func (di *daoImpl) addDictEntry(user string, dictEntry dictionaryEntry) error {
 	// It might make sense to manage transaction here. But it is too advanced for now
-	_, err := findWordId(db, user, dictEntry.Word)
+	_, err := findWordID(di.db, user, dictEntry.Word)
 	if err == nil {
 		return errors.New("Word already exists")
 	}
-	res, err := db.Exec("insert into Words(word, owner) values(?, ?)", dictEntry.Word, user)
+	res, err := di.db.Exec("insert into Words(word, owner) values(?, ?)", dictEntry.Word, user)
 	if err != nil {
 		log.Println("Cannot create new entry", err)
 		return err
 	}
 	pk, err := res.LastInsertId()
 	for _, t := range dictEntry.Translations {
-		_, err := db.Exec("insert into Translations(translation, word_id) values(?, ?)", t, pk)
+		_, err := di.db.Exec("insert into Translations(translation, word_id) values(?, ?)", t, pk)
 		if err != nil {
 			log.Println("Error occurred while saving translations", err)
 			return err
 		}
 	}
 	for _, i := range dictEntry.Idioms {
-		_, err := db.Exec("insert into Idioms(idiom, word_id) values(?, ?)", i, pk)
+		_, err := di.db.Exec("insert into Idioms(idiom, word_id) values(?, ?)", i, pk)
 		if err != nil {
 			log.Println("Error occurred while saving idioms", err)
 			return err
@@ -53,31 +79,31 @@ func addDictEntry(db *sql.DB, user string, dictEntry dictionaryEntry) error {
 	return nil
 }
 
-func updateDictEntry(db *sql.DB, user string, dictEntry dictionaryEntry) error {
-	word_id, err := findWordId(db, user, dictEntry.Word)
+func (di *daoImpl) updateDictEntry(user string, dictEntry dictionaryEntry) error {
+	wordID, err := findWordID(di.db, user, dictEntry.Word)
 	if err != nil {
 		log.Println("Cannot obtain word to update", err)
 		return err
 	}
-	_, err = db.Exec("delete from Translations where word_id = ?", word_id)
+	_, err = di.db.Exec("delete from Translations where word_id = ?", wordID)
 	if err != nil {
 		log.Println("Error occurred while updating dictionary entry", err)
 		return err
 	}
 	for _, t := range dictEntry.Translations {
-		_, err := db.Exec("insert into Translations(translation, word_id) values(?, ?)", t, word_id)
+		_, err := di.db.Exec("insert into Translations(translation, word_id) values(?, ?)", t, wordID)
 		if err != nil {
 			log.Println("Error occurred while saving translations", err)
 			return err
 		}
 	}
-	_, err = db.Exec("delete from Idioms where word_id = ?", word_id)
+	_, err = di.db.Exec("delete from Idioms where word_id = ?", wordID)
 	if err != nil {
 		log.Println("Error occurred while deleting idioms", err)
 		return err
 	}
 	for _, i := range dictEntry.Idioms {
-		_, err := db.Exec("insert into Idioms(idiom, word_id) values(?, ?)", i, word_id)
+		_, err := di.db.Exec("insert into Idioms(idiom, word_id) values(?, ?)", i, wordID)
 		if err != nil {
 			log.Println("Error occurred while saving idioms", err)
 			return err
@@ -86,18 +112,18 @@ func updateDictEntry(db *sql.DB, user string, dictEntry dictionaryEntry) error {
 	return nil
 }
 
-func deleteDictEntry(db *sql.DB, user string, dictEntry dictionaryEntry) error {
-	word_id, err := findWordId(db, user, dictEntry.Word)
+func (di *daoImpl) deleteDictEntry(user string, dictEntry dictionaryEntry) error {
+	wordID, err := findWordID(di.db, user, dictEntry.Word)
 	if err != nil {
 		log.Println("Cannot obtain word to delete", err)
 		return err
 	}
-	_, err = db.Exec("delete from Translations where word_id = ?", word_id)
+	_, err = di.db.Exec("delete from Translations where word_id = ?", wordID)
 	if err != nil {
 		log.Println("Error occurred while deleting dictionary entry", err)
 		return err
 	}
-	_, err = db.Exec("delete from Idioms where word_id = ?", word_id)
+	_, err = di.db.Exec("delete from Idioms where word_id = ?", wordID)
 	if err != nil {
 		log.Println("Error occurred while deleting idioms", err)
 		return err
@@ -105,8 +131,8 @@ func deleteDictEntry(db *sql.DB, user string, dictEntry dictionaryEntry) error {
 	return nil
 }
 
-func checkTranslation(db *sql.DB, user, word, translation string) (bool, error) {
-	rows, err := db.Query("select 1 from Words w inner join Translations t on w.id = t.word_id where w.owner = ? and w.word = ? and t.translation = ?", user, word, translation)
+func (di *daoImpl) checkTranslation(user, word, translation string) (bool, error) {
+	rows, err := di.db.Query("select 1 from Words w inner join Translations t on w.id = t.word_id where w.owner = ? and w.word = ? and t.translation = ?", user, word, translation)
 	if err != nil {
 		log.Println("Error occurred while checking translation", err)
 		return false, err
@@ -118,14 +144,14 @@ func checkTranslation(db *sql.DB, user, word, translation string) (bool, error) 
 	return false, nil
 }
 
-func getAllWords(db *sql.DB, user string) ([]string, error) {
-	rows, err := db.Query("select word from Words where owner = ?", user)
+func (di *daoImpl) getAllWords(user string) ([]string, error) {
+	rows, err := di.db.Query("select word from Words where owner = ?", user)
 	if err != nil {
 		log.Println("Error occurred while reading words", err)
 		return nil, err
 	}
 	defer rows.Close()
-	var result []string = make([]string, 0, 10)
+	var result = make([]string, 0, 10)
 	for rows.Next() {
 		var w string
 		err = rows.Scan(&w)
@@ -138,8 +164,8 @@ func getAllWords(db *sql.DB, user string) ([]string, error) {
 	return result, nil
 }
 
-func getDictEntry(db *sql.DB, user, word string) (*dictionaryEntry, error) {
-	rows, err := db.Query("select w.word, t.translation, i.idiom from Words w inner join Translations t on w.id = t.word_id inner join Idioms i on w.id = i.word_id where w.word = ? and w.owner = ?", word, user)
+func (di *daoImpl) getDictEntry(user, word string) (*dictionaryEntry, error) {
+	rows, err := di.db.Query("select w.word, t.translation, i.idiom from Words w inner join Translations t on w.id = t.word_id inner join Idioms i on w.id = i.word_id where w.word = ? and w.owner = ?", word, user)
 	if err != nil {
 		log.Println("Cannot get dictionary entry", err)
 		return nil, err
@@ -162,8 +188,8 @@ func getDictEntry(db *sql.DB, user, word string) (*dictionaryEntry, error) {
 	return entry, nil
 }
 
-func retrieveUsers(db *sql.DB) ([]string, error) {
-	rows, err := db.Query("select distinct owner from Words")
+func (di *daoImpl) retrieveUsers() ([]string, error) {
+	rows, err := di.db.Query("select distinct owner from Words")
 	if err != nil {
 		log.Println("Cannot retrieve users", err)
 		return nil, err
