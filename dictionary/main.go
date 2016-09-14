@@ -8,11 +8,12 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/engine/standard"
 
-	meterBucket "github.com/Clever/leakybucket"
+	"github.com/Clever/leakybucket"
 	"github.com/Clever/leakybucket/memory"
 
-	flowBucket "github.com/imormo/leakyBucket"
 	"fmt"
+
+	flowBucket "github.com/apg/bucket"
 )
 
 type (
@@ -128,20 +129,26 @@ func limitRequest(filter leakybucket.Bucket) func(mainHandler echo.HandlerFunc) 
 	}
 }
 
-var flowLeackyBucket flowBucket.LeakyBucket
+var flowLeackyBucket flowBucket.Bucket
 
 func queueRequest(c echo.Context) error {
-	err := flowLeackyBucket.Add(struct{})
-	if err != nil {
+	err := flowLeackyBucket.Put(time.Now())
+	if err == flowBucket.ErrFull {
 		log.Println("Bucket is full")
 		return c.String(http.StatusServiceUnavailable, "Too many requests")
+	} else if err != nil {
+		return c.NoContent(http.StatusInternalServerError)
 	}
 	return c.NoContent(http.StatusAccepted)
 }
 
-func flowBucketRequestHandler(m interface{}) (err error) {
-	fmt.Println("Handled")
-	return nil
+func flowBucketProcessor() {
+	for {
+		m := <-flowLeackyBucket.C()
+		var t = m.(time.Time)
+		var ct = time.Now()
+		fmt.Printf("Event time: %s, current time: %s\n", t.Format("04:05.9"), ct.Format("04:05.9"))
+	}
 }
 
 func main() {
@@ -152,7 +159,8 @@ func main() {
 	if err != nil {
 		log.Fatal("Cannot create rate limiter", err)
 	}
-	flowLeackyBucket = flowBucket.NewLeakyBucket(10, 5, flowBucketRequestHandler)
+	flowLeackyBucket = flowBucket.NewLeakyBucket(5, 2*time.Second)
+	go flowBucketProcessor()
 	var mainEndpoint = echo.New()
 	mainEndpoint.Use(limitRequest(meterLeackyBucket))
 	mainEndpoint.POST("/word", addWord)
@@ -160,6 +168,6 @@ func main() {
 	mainEndpoint.DELETE("/word/:w", deleteWord)
 	mainEndpoint.GET("/word/:w", findWord)
 	mainEndpoint.GET("/word", loadAllWords)
-	mainEndpoint.GET("/queue", queueRequest)
+	mainEndpoint.GET("/flow", queueRequest)
 	mainEndpoint.Run(standard.New(":8083"))
 }
