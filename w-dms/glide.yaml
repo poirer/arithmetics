@@ -1,0 +1,4 @@
+package: github.com/arithmetics/w-dms
+import:
+- package: github.com/mattn/go-sqlite3
+  version: ^1.1.0
