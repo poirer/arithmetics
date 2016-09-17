@@ -71,7 +71,7 @@ func (d *sqliteDriver) Create(t Task) error {
 	return nil
 }
 
-func (d *sqliteDriver) ReadByID(id *int64) (TaskList, error) {
+func (d *sqliteDriver) ReadByID(id *string) (TaskList, error) {
 	if id != nil {
 		return d.readByCondition("where t.id = ?", id)
 	}
@@ -236,6 +236,10 @@ func (d *sqliteDriver) readByCondition(condition string, args ...interface{}) (T
 		i++
 	}
 	return list, nil
+}
+
+func (d *sqliteDriver) Close() error {
+	return d.db.Close()
 }
 
 func addToSliceIfAbsent(slice *[]string, value string) {

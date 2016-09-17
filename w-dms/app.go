@@ -24,15 +24,15 @@ const task = `{
 // Task is task
 type (
 	Task struct {
-		ID           int      `json:"id"`
-		Alias        string   `json:"alias"`
-		Description  string   `json:"desc"`
-		Type         string   `json:"type"`
-		Tags         []string `json:"tags"`
-		Timestamp    int64    `json:"ts"`
-		EstimateTime string   `json:"etime"`
-		RealTime     string   `json:"rtime"`
-		Reminders    []string `json:"reminders"`
+		ID           interface{} `json:"id" bson:"_id,omitempty"`
+		Alias        string      `json:"alias" bson:"alias"`
+		Description  string      `json:"desc"`
+		Type         string      `json:"type"`
+		Tags         []string    `json:"tags"`
+		Timestamp    int64       `json:"ts"`
+		EstimateTime string      `json:"etime"`
+		RealTime     string      `json:"rtime"`
+		Reminders    []string    `json:"reminders"`
 	}
 
 	// TaskList is tasklist
@@ -45,9 +45,18 @@ type (
 		Update(t Task) error
 		Delete(t Task) error
 	}
+
+	closeable interface {
+		Close() error
+	}
+
+	closeableDbDriver interface {
+		dbDriver
+		closeable
+	}
 )
 
-var db dbDriver // Yes, I remember that global variable is bad. But I don't know yet what is good
+var db closeableDbDriver // Yes, I remember that global variable is bad. But I don't know yet what is good
 
 func closeCompletelyRequestBody(body *io.ReadCloser) {
 	defer func() {
@@ -174,7 +183,9 @@ func updateTask(respWriter http.ResponseWriter, request *http.Request) {
 }
 
 func main() {
-	db = newSqliteDriver("/home/zhenya/Development/data/tasks.db")
+	//db = newSqliteDriver("/home/zhenya/Development/data/tasks.db")
+	db = newMongoDriver("Tasks")
+	defer db.Close()
 	var sm = http.NewServeMux()
 	sm.HandleFunc("/task", dispatchTaskRequest)
 	http.ListenAndServe(":8080", sm)
