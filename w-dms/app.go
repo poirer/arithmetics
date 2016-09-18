@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strconv"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -40,7 +39,7 @@ type (
 
 	dbDriver interface {
 		Create(t Task) error
-		ReadByID(id *int64) (TaskList, error)
+		ReadByID(id interface{}) (TaskList, error)
 		ReadByAlias(alias *string) (TaskList, error)
 		Update(t Task) error
 		Delete(t Task) error
@@ -126,16 +125,11 @@ func addTask(respWriter http.ResponseWriter, request *http.Request) {
 }
 
 func readTask(respWriter http.ResponseWriter, request *http.Request) {
-	var sID = request.FormValue("id")
+	var id = request.FormValue("id")
 	var alias = request.FormValue("alias")
 	var result TaskList
 	var err error
-	if sID != "" {
-		id, parseErr := strconv.ParseInt(sID, 10, 0)
-		if parseErr != nil {
-			writeError(respWriter, http.StatusBadRequest, parseErr)
-			return
-		}
+	if id != "" {
 		result, err = db.ReadByID(&id)
 	} else if alias != "" {
 		result, err = db.ReadByAlias(&alias)
@@ -150,14 +144,9 @@ func readTask(respWriter http.ResponseWriter, request *http.Request) {
 }
 
 func deleteTask(respWriter http.ResponseWriter, request *http.Request) {
-	var sID = request.FormValue("id")
-	if sID != "" {
-		id, parseErr := strconv.ParseInt(sID, 10, 0)
-		if parseErr != nil {
-			writeError(respWriter, http.StatusBadRequest, parseErr)
-			return
-		}
-		err := db.Delete(Task{ID: int(id)})
+	var id = request.FormValue("id")
+	if id != "" {
+		err := db.Delete(Task{ID: id})
 		if err != nil {
 			writeError(respWriter, http.StatusInternalServerError, err)
 			return
@@ -183,7 +172,7 @@ func updateTask(respWriter http.ResponseWriter, request *http.Request) {
 }
 
 func main() {
-	//db = newSqliteDriver("/home/zhenya/Development/data/tasks.db")
+	//db = newSqыliteDriver("/home/zhenya/Development/data/tasks.db")
 	db = newMongoDriver("Tasks")
 	defer db.Close()
 	var sm = http.NewServeMux()

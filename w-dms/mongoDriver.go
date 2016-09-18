@@ -2,8 +2,8 @@ package main
 
 import (
 	"gopkg.in/mgo.v2"
-	"log"
 	"gopkg.in/mgo.v2/bson"
+	"log"
 )
 
 type mongoDriver struct {
@@ -20,10 +20,11 @@ func newMongoDriver(dbName string) *mongoDriver {
 }
 
 func (d *mongoDriver) Create(t Task) error {
-	var c *mgo.Collection = d.session.DB(d.database).C("Tasks")
+	var c *mgo.Collection = d.getTasksC()
 	return c.Insert(&t)
 }
-func (d *mongoDriver) ReadByID(id *int64) (TaskList, error) {
+
+func (d *mongoDriver) ReadByID(id interface{}) (TaskList, error) {
 	var c *mgo.Collection = d.session.DB(d.database).C("Tasks")
 	var tasks TaskList
 	if id == nil {
@@ -33,7 +34,8 @@ func (d *mongoDriver) ReadByID(id *int64) (TaskList, error) {
 		}
 	} else {
 		var task Task
-		err := c.Find("").One(&task)
+		objIndex := bson.ObjectIdHex(*id.(*string))
+		err := c.Find(bson.M{"_id": objIndex}).One(&task)
 		if err != nil {
 			return nil, err
 		}
@@ -42,8 +44,9 @@ func (d *mongoDriver) ReadByID(id *int64) (TaskList, error) {
 	}
 	return tasks, nil
 }
+
 func (d *mongoDriver) ReadByAlias(alias *string) (TaskList, error) {
-	var c *mgo.Collection = d.session.DB(d.database).C("Tasks")
+	var c *mgo.Collection = d.getTasksC()
 	var tasks TaskList
 	if alias == nil {
 		err := c.Find(nil).All(&tasks)
@@ -51,18 +54,26 @@ func (d *mongoDriver) ReadByAlias(alias *string) (TaskList, error) {
 			return nil, err
 		}
 	} else {
-		err := c.Find(bson.M{"alias":"FT"}).All(&tasks)
+		err := c.Find(bson.M{"alias": alias}).All(&tasks)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return nil, nil }
-func (d *mongoDriver) Update(t Task) error                         { return nil }
-func (d *mongoDriver) Delete(t Task) error {
-	return nil
+	return tasks, nil
 }
+
+func (d *mongoDriver) Update(t Task) error { return nil }
+func (d *mongoDriver) Delete(t Task) error {
+	var c = d.getTasksC()
+	return c.RemoveId(bson.ObjectIdHex(t.ID.(string)))
+}
+
 func (d *mongoDriver) Close() error {
 	d.session.Close()
 	return nil
+}
+
+func (d *mongoDriver) getTasksC() *mgo.Collection {
+	return d.session.DB(d.database).C("Tasks")
 }

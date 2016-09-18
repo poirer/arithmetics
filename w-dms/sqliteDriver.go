@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"log"
+	"strconv"
 )
 
 const (
@@ -71,9 +72,14 @@ func (d *sqliteDriver) Create(t Task) error {
 	return nil
 }
 
-func (d *sqliteDriver) ReadByID(id *string) (TaskList, error) {
+func (d *sqliteDriver) ReadByID(id interface{}) (TaskList, error) {
 	if id != nil {
-		return d.readByCondition("where t.id = ?", id)
+		iID, err := strconv.ParseInt(id.(string), 10, 0)
+		if err != nil {
+			return nil, err
+		}
+
+		return d.readByCondition("where t.id = ?", iID)
 	}
 	return d.readByCondition("")
 }
@@ -117,6 +123,11 @@ func (d *sqliteDriver) Update(t Task) error {
 }
 
 func (d *sqliteDriver) Delete(t Task) error {
+	id, err := strconv.ParseInt(t.ID.(string), 10, 0)
+	if err != nil {
+		return err
+	}
+	t.ID = id
 	var canCommit = false
 	transaction, err := d.db.Begin()
 	if err != nil {
