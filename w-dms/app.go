@@ -20,12 +20,19 @@ const task = `{
 {"eventType":"session_start","ts":1473837996,"params":{"first":1,"second":"Two"}}
 `
 
-// Task is task
 type (
+
+	// Task is task
+	//swagger:parameters Save
 	Task struct {
+		// Task Id
 		ID           interface{} `json:"id" bson:"_id,omitempty"`
+		// Task Alias
 		Alias        string      `json:"alias" bson:"alias"`
+		// Task description
 		Description  string      `json:"desc"`
+		// Task type
+		// required: true
 		Type         string      `json:"type"`
 		Tags         []string    `json:"tags"`
 		Timestamp    int64       `json:"ts"`
@@ -110,7 +117,18 @@ func dispatchTaskRequest(respWriter http.ResponseWriter, request *http.Request) 
 	}
 }
 
+// REST API to save a task
 func addTask(respWriter http.ResponseWriter, request *http.Request) {
+	// swagger:route POST /task Save
+	// Saves a task in the database
+	// Consumes:
+	// - application/json
+	// Produces:
+	// - No content
+	// Responses:
+	// 201: Task was saved successfully
+	// 500: Error occurred while saving the task
+
 	task, err := readTaskFromRequest(request)
 	if err != nil {
 		writeError(respWriter, http.StatusInternalServerError, err)
@@ -177,5 +195,7 @@ func main() {
 	defer db.Close()
 	var sm = http.NewServeMux()
 	sm.HandleFunc("/task", dispatchTaskRequest)
+	swaggerDoc := http.FileServer(http.Dir("swagger-ui"))
+	sm.Handle("/api-doc/", http.StripPrefix("/api-doc/", swaggerDoc))
 	http.ListenAndServe(":8080", sm)
 }

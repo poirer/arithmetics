@@ -1,0 +1,1 @@
+{"swagger":"2.0","paths":{"/task":{"post":{"description":"Saves a task in the database","consumes":["application/json"],"produces":["No content"],"operationId":"Save","responses":{"201":{"$ref":"#/responses/Task%20was%20saved%20successfully"},"500":{"$ref":"#/responses/Error%20occurred%20while%20saving%20the%20task"}}}}},"definitions":{}}
