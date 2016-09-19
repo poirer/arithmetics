@@ -29,14 +29,18 @@ func (d *mongoDriver) ReadByID(id interface{}) (TaskList, error) {
 	var tasks TaskList
 	if id == nil {
 		err := c.Find(nil).All(&tasks)
-		if err != nil {
+		if err != nil && err == mgo.ErrNotFound {
+			return nil, taskNotFoundError
+		} else if err != nil {
 			return nil, err
 		}
 	} else {
 		var task Task
 		objIndex := bson.ObjectIdHex(*id.(*string))
 		err := c.Find(bson.M{"_id": objIndex}).One(&task)
-		if err != nil {
+		if err != nil && err == mgo.ErrNotFound {
+			return TaskList{}, nil
+		} else if err != nil {
 			return nil, err
 		}
 		tasks = make(TaskList, 1)
@@ -50,12 +54,16 @@ func (d *mongoDriver) ReadByAlias(alias *string) (TaskList, error) {
 	var tasks TaskList
 	if alias == nil {
 		err := c.Find(nil).All(&tasks)
-		if err != nil {
+		if err != nil && err == mgo.ErrNotFound {
+			return TaskList{}, nil
+		} else if err != nil {
 			return nil, err
 		}
 	} else {
 		err := c.Find(bson.M{"alias": alias}).All(&tasks)
-		if err != nil {
+		if err != nil && err == mgo.ErrNotFound {
+			return nil, taskNotFoundError
+		} else if err != nil {
 			return nil, err
 		}
 	}
@@ -63,7 +71,15 @@ func (d *mongoDriver) ReadByAlias(alias *string) (TaskList, error) {
 	return tasks, nil
 }
 
-func (d *mongoDriver) Update(t Task) error { return nil }
+func (d *mongoDriver) Update(t Task) error {
+	var c *mgo.Collection = d.getTasksC()
+	err := c.UpdateId(t.ID, t)
+	if err == mgo.ErrNotFound {
+		return taskNotFoundError
+	}
+	return err
+}
+
 func (d *mongoDriver) Delete(t Task) error {
 	var c = d.getTasksC()
 	return c.RemoveId(bson.ObjectIdHex(t.ID.(string)))

@@ -76,7 +76,7 @@ func (d *sqliteDriver) ReadByID(id interface{}) (TaskList, error) {
 	if id != nil {
 		iID, err := strconv.ParseInt(id.(string), 10, 0)
 		if err != nil {
-			return nil, err
+			return nil, invalidIDError
 		}
 
 		return d.readByCondition("where t.id = ?", iID)
@@ -111,8 +111,14 @@ func (d *sqliteDriver) Update(t Task) error {
 	if err != nil {
 		return err
 	}
-	_, err = transaction.Exec(updateClause, t.Alias, t.Description, typeID, t.Timestamp, t.EstimateTime, t.RealTime, t.ID)
+	res, err := transaction.Exec(updateClause, t.Alias, t.Description, typeID, t.Timestamp, t.EstimateTime, t.RealTime, t.ID)
 	if err != nil {
+		return err
+	}
+	count, err := res.RowsAffected()
+	if err == sql.ErrNoRows || count == 0 {
+		return taskNotFoundError
+	} else if err != nil {
 		return err
 	}
 	if err = addTaskTagsAndRemindersInTransaction(t, transaction); err != nil {
@@ -143,7 +149,14 @@ func (d *sqliteDriver) Delete(t Task) error {
 	if err = cleanTagsAndRemindersInTransaction(t, transaction); err != nil {
 		return err
 	}
-	if _, err = transaction.Exec("delete from Tasks where id = ?", t.ID); err != nil {
+	res, err := transaction.Exec("delete from Tasks where id = ?", t.ID)
+	if err != nil {
+		return err
+	}
+	count, err := res.RowsAffected()
+	if err == sql.ErrNoRows || count == 0 {
+		return taskNotFoundError
+	} else if err != nil {
 		return err
 	}
 	canCommit = true
@@ -245,6 +258,9 @@ func (d *sqliteDriver) readByCondition(condition string, args ...interface{}) (T
 	for id = range taskMap {
 		list[i] = *taskMap[id]
 		i++
+	}
+	if len(list) == 0 && condition != "" {
+		return nil, taskNotFoundError
 	}
 	return list, nil
 }
