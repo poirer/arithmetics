@@ -13,21 +13,22 @@ import (
 	"log"
 	"net/http"
 
+	"flag"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 // Task is task
 // swagger:model
 type Task struct {
-	ID interface{} `json:"id" bson:"_id,omitempty"`
-	Alias string `json:"alias" bson:"alias"`
-	Description string `json:"desc"`
-	Type         string   `json:"type"`
-	Tags         []string `json:"tags"`
-	Timestamp    int64    `json:"ts"`
-	EstimateTime string   `json:"etime"`
-	RealTime     string   `json:"rtime"`
-	Reminders    []string `json:"reminders"`
+	ID           interface{} `json:"id" bson:"_id,omitempty"`
+	Alias        string      `json:"alias" bson:"alias"`
+	Description  string      `json:"desc"`
+	Type         string      `json:"type"`
+	Tags         []string    `json:"tags"`
+	Timestamp    int64       `json:"ts"`
+	EstimateTime string      `json:"etime"`
+	RealTime     string      `json:"rtime"`
+	Reminders    []string    `json:"reminders"`
 }
 
 type SwaggerTask struct {
@@ -88,25 +89,25 @@ type TaskNotFoundError struct {
 
 // Task was not found
 //swagger:response taskNotFound
-type SwaggerTaskNotFound struct {}
+type SwaggerTaskNotFound struct{}
 
 // Task created
 //swagger:response taskCreated
-type SwaggerTaskCreated struct {}
+type SwaggerTaskCreated struct{}
 
 // Task updated
 //swagger:response taskUpdated
-type SwaggerTaskUpdated struct {}
+type SwaggerTaskUpdated struct{}
 
 // Task deleted
 //swagger:response taskDeleted
-type SwaggerTaskDeleted struct {}
+type SwaggerTaskDeleted struct{}
 
 var (
 	taskNotFoundError = errors.New("Task not found")
-	unknownURLError = errors.New("Not found")
-	missingIdError = errors.New("Task id is missing")
-	invalidIDError = errors.New("Invalid task id")
+	unknownURLError   = errors.New("Not found")
+	missingIdError    = errors.New("Task id is missing")
+	invalidIDError    = errors.New("Invalid task id")
 )
 
 type (
@@ -286,8 +287,20 @@ func updateTask(respWriter http.ResponseWriter, request *http.Request) {
 }
 
 func main() {
-	//db = newSqыliteDriver("/home/zhenya/Development/data/tasks.db")
-	db = newMongoDriver("Tasks")
+	var dbType *string
+	dbType = flag.String("db", "mongo", "Database type, either mongo or sqlite")
+	flag.Parse()
+	switch *dbType {
+	case "mongo":
+		log.Println("Using mongodb")
+		db = newMongoDriver("Tasks")
+	case "sqlite":
+		log.Println("Using sqlite")
+		db = newSqliteDriver("tasks.db")
+	default:
+		log.Println("Using default (mongo)")
+		db = newMongoDriver("Tasks")
+	}
 	defer db.Close()
 	var sm = http.NewServeMux()
 	sm.HandleFunc("/task", dispatchTaskRequest)
