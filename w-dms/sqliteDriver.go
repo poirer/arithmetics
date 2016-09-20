@@ -76,7 +76,7 @@ func (d *sqliteDriver) ReadByID(id interface{}) (TaskList, error) {
 	if id != nil {
 		iID, err := strconv.ParseInt(id.(string), 10, 0)
 		if err != nil {
-			return nil, invalidIDError
+			return nil, errInvalidID
 		}
 
 		return d.readByCondition("where t.id = ?", iID)
@@ -117,7 +117,7 @@ func (d *sqliteDriver) Update(t Task) error {
 	}
 	count, err := res.RowsAffected()
 	if err == sql.ErrNoRows || count == 0 {
-		return taskNotFoundError
+		return errTaskNotFound
 	} else if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (d *sqliteDriver) Delete(t Task) error {
 	}
 	count, err := res.RowsAffected()
 	if err == sql.ErrNoRows || count == 0 {
-		return taskNotFoundError
+		return errTaskNotFound
 	} else if err != nil {
 		return err
 	}
@@ -260,7 +260,7 @@ func (d *sqliteDriver) readByCondition(condition string, args ...interface{}) (T
 		i++
 	}
 	if len(list) == 0 && condition != "" {
-		return nil, taskNotFoundError
+		return nil, errTaskNotFound
 	}
 	return list, nil
 }

@@ -1,9 +1,10 @@
 package main
 
 import (
+	"log"
+
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	"log"
 )
 
 type mongoDriver struct {
@@ -20,17 +21,17 @@ func newMongoDriver(dbName string) *mongoDriver {
 }
 
 func (d *mongoDriver) Create(t Task) error {
-	var c *mgo.Collection = d.getTasksC()
+	var c = d.getTasksC()
 	return c.Insert(&t)
 }
 
 func (d *mongoDriver) ReadByID(id interface{}) (TaskList, error) {
-	var c *mgo.Collection = d.session.DB(d.database).C("Tasks")
+	var c = d.session.DB(d.database).C("Tasks")
 	var tasks TaskList
 	if id == nil {
 		err := c.Find(nil).All(&tasks)
 		if err != nil && err == mgo.ErrNotFound {
-			return nil, taskNotFoundError
+			return nil, errTaskNotFound
 		} else if err != nil {
 			return nil, err
 		}
@@ -50,7 +51,7 @@ func (d *mongoDriver) ReadByID(id interface{}) (TaskList, error) {
 }
 
 func (d *mongoDriver) ReadByAlias(alias *string) (TaskList, error) {
-	var c *mgo.Collection = d.getTasksC()
+	var c = d.getTasksC()
 	var tasks TaskList
 	if alias == nil {
 		err := c.Find(nil).All(&tasks)
@@ -62,7 +63,7 @@ func (d *mongoDriver) ReadByAlias(alias *string) (TaskList, error) {
 	} else {
 		err := c.Find(bson.M{"alias": alias}).All(&tasks)
 		if err != nil && err == mgo.ErrNotFound {
-			return nil, taskNotFoundError
+			return nil, errTaskNotFound
 		} else if err != nil {
 			return nil, err
 		}
@@ -72,10 +73,10 @@ func (d *mongoDriver) ReadByAlias(alias *string) (TaskList, error) {
 }
 
 func (d *mongoDriver) Update(t Task) error {
-	var c *mgo.Collection = d.getTasksC()
+	var c = d.getTasksC()
 	err := c.UpdateId(t.ID, t)
 	if err == mgo.ErrNotFound {
-		return taskNotFoundError
+		return errTaskNotFound
 	}
 	return err
 }
