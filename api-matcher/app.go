@@ -2,91 +2,91 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
-const (
-	taskSimpleJSONSpec = `{
-    "alias": string,
-    "desc": string,
-    "etime": string,
-    "reminders": [string],
-    "rtime": string,
-    "tags": [string],
-    "ts": int,
-    "type": string
-  }`
+type (
+	responseField struct {
+		name      string
+		typ       string
+		nestedObj []responseField
+	}
 
-	taskJSONSpec = `{
-    "alias": string,
-    "desc": string,
-    "inner" : {
-      "f1":string,
-      "f2":[int],
-      "f3": {"nf1":string,"nf2":string}
-    },
-    "etime": string,
-    "reminders": [string],
-    "rtime": string,
-    "tags": [string],
-    "ts": int,
-    "type": string,
-    "done": bool
-  }`
+	formParam struct {
+		Key   string `xml:"name"`
+		Value string `xml:"value"`
+	}
+
+	reqAddr struct {
+		URL    string `xml:",chardata"`
+		Method string `xml:"method,attr"`
+	}
+
+	apiDefList struct {
+		DefList []apiCallDef `xml:"api-def"`
+	}
+
+	apiCallDef struct {
+		RequestBodyTpl       string      `xml:"request-body-template"`
+		Address              *reqAddr    `xml:"address"` // Declare it as a pointer is the only way to trim values using reflection, that I have found
+		ResponseBodyTpl      string      `xml:"response-body-template"`
+		SkipRespVerification bool        `xml:"skip-response-verification"`
+		Status               int         `xml:"status"`
+		Params               []formParam `xml:"parameters>param"`
+	}
 )
-
-type responseField struct {
-	name      string
-	typ       string
-	nestedObj []responseField
-}
-
-type apiCallDef struct {
-	requestBodyTmpl          string
-	method                   string
-	url                      string
-	responseBodyTmpl         string
-	skipResponseVerification bool
-	status                   int
-}
 
 func checkEndpoint(def apiCallDef) error {
 	var client = http.Client{}
 	var body io.Reader
-	if def.requestBodyTmpl != "" {
-		content, err := composeRequestBody(def.requestBodyTmpl)
+	if def.RequestBodyTpl != "" {
+		content, err := composeRequestBody(def.RequestBodyTpl)
 		if err != nil {
 			println("Error occurred when trying to compose request body: ", err.Error())
 			return err
 		}
 		body = strings.NewReader(content)
 	}
-	request, err := http.NewRequest(def.method, def.url, body)
+	request, err := http.NewRequest(def.Address.Method, def.Address.URL, body)
 	if err != nil {
 		println("Error occurred when trying to create new request: ", err.Error())
 		return err
 	}
 	request.Header.Add("Content-Type", "application/json")
+	if def.Params != nil {
+		parameters := url.Values{}
+		for _, p := range def.Params {
+			parameters.Add(p.Key, p.Value)
+		}
+		request.Form = parameters
+	}
 	response, err := client.Do(request)
 	if err != nil {
 		println("Error occurred when trying to perform request: ", err.Error())
 		return err
 	}
-	if response.StatusCode != def.status {
-		return errors.New("Response status code is not equal to expected")
+	if response.StatusCode != def.Status {
+		return fmt.Errorf("Response status (%d) code is not equal to expected (%d)", response.StatusCode, def.Status)
 	}
-	if !def.skipResponseVerification {
+	if !def.SkipRespVerification {
 		bodyContent, err := ioutil.ReadAll(response.Body)
-		if len(def.responseBodyTmpl) > 0 && len(bodyContent) == 0 {
+		if err != nil {
+			println("Error occurred while trying to read response")
+			return err
+		}
+		if len(def.ResponseBodyTpl) > 0 && len(bodyContent) == 0 {
 			return errors.New("Response body expected but was not received")
 		}
-		if len(def.responseBodyTmpl) == 0 && len(bodyContent) > 0 {
+		if len(def.ResponseBodyTpl) == 0 && len(bodyContent) > 0 {
 			return errors.New("Response body not expected but was received")
 		}
-		expectedFields, err := parseResponseFields(def.responseBodyTmpl)
+		expectedFields, err := parseResponseFields(def.ResponseBodyTpl)
 		if err != nil {
 			println("Error occurred when trying to parse expected fields: ", err.Error())
 			return err
@@ -103,18 +103,25 @@ func checkEndpoint(def apiCallDef) error {
 	return nil
 }
 
-func main() {
-	var apiDef = apiCallDef{
-		requestBodyTmpl: taskSimpleJSONSpec,
-		status:          201,
-		skipResponseVerification: true,
-		method: http.MethodPost,
-		url:    "http://localhost:8080/task",
-	}
-	res := checkEndpoint(apiDef)
-	if res != nil {
-		println("Unseccessful ", res.Error())
+func logCall(def apiCallDef, err error) {
+	log.Println("***** Call *****") // Fortran? :-)
+	log.Printf("%s\t%s\n", def.Address.Method, def.Address.URL)
+	if err != nil {
+		log.Println("Failed: ", err.Error())
 	} else {
-		println("Successful")
+		log.Println("Success")
+	}
+}
+
+func main() {
+	generator = randValueGenerator{}
+	defs, err := readAPICallDefinitions("endpoints.xml")
+	if err != nil {
+		println("Error occurred: ", err.Error())
+	} else {
+		for _, d := range defs {
+			err := checkEndpoint(d)
+			logCall(d, err)
+		}
 	}
 }

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<definitions>
+  <api-def>
+    <address method="POST">
+      http://localhost:8080/task
+    </address>
+    <request-body-template>
+      {
+        "alias": string,
+        "desc": string,
+        "etime": string,
+        "reminders": [string],
+        "rtime": string,
+        "tags": [string],
+        "ts": int,
+        "type": string
+      }
+    </request-body-template>
+    <status>201</status>
+    <response-body-template/>
+    <skip-response-verification>
+      true
+    </skip-response-verification>
+  </api-def>
+  <api-def>
+    <address method="GET">
+      http://localhost:8080/task
+    </address>
+    <request-body-template/>
+    <status>200</status>
+    <response-body-template/>
+    <skip-response-verification>
+      true
+    </skip-response-verification>
+  </api-def>
+  <api-def>
+    <address method="DELETE">
+      http://localhost:8080/task
+    </address>
+    <request-body-template/>
+    <status>400</status>
+    <response-body-template/>
+    <skip-response-verification>
+      true
+    </skip-response-verification>
+  </api-def>
+  <api-def>
+    <address method="DELETE">
+      http://localhost:8080/task?id=507f191e810c19729de860ea
+    </address>
+    <request-body-template/>
+    <status>404</status>
+    <response-body-template/>
+    <skip-response-verification>
+      true
+    </skip-response-verification>
+  </api-def>
+</definitions>

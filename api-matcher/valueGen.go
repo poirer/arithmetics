@@ -3,10 +3,21 @@ package main
 import (
 	"bytes"
 	"errors"
+	"math"
+	"math/rand"
+	"strconv"
 	"strings"
 )
 
-func genValue(typeStr string) (string, error) {
+type (
+	valueGenerator interface {
+		genValue(typeStr string) (string, error)
+	}
+
+	randValueGenerator struct{}
+)
+
+func (randValueGenerator) genValue(typeStr string) (string, error) {
 	typeStr = strings.Trim(typeStr, "\n\t\r ")
 	if typeStr[0] == '[' && typeStr[len(typeStr)-1] == ']' {
 		typeStr = typeStr[1 : len(typeStr)-1]
@@ -19,27 +30,43 @@ func genValue(typeStr string) (string, error) {
 		return genInt(), nil
 	case "bool":
 		return genBool(), nil
+	case "float":
+		return genFloat(), nil
 	default:
 		return "", errors.New("Unsupported type <" + typeStr + ">")
 	}
 }
 
 func genString() string {
-	return `"A"`
+	const charSet = "abcdefghijklmnopqrstuvwxyz "
+	var l = rand.Intn(24)
+	var strBuf bytes.Buffer
+	strBuf.WriteByte('"')
+	for i := 0; i < l; i++ {
+		strBuf.WriteByte(charSet[rand.Intn(len(charSet))])
+	}
+	strBuf.WriteByte('"')
+	return strBuf.String()
 }
 
 func genBool() string {
-	return "true"
+	return strconv.FormatBool(rand.Intn(2) != 0)
 }
 
 func genInt() string {
-	return "0"
+	return strconv.FormatInt(int64(rand.Intn(math.MaxInt32)), 10)
+}
+
+func genFloat() string {
+	var value = rand.Float32()
+	return strconv.FormatFloat(float64(value), 'f', -1, 32)
 }
 
 func genArray(itemType string) string {
 	var buf bytes.Buffer
 	buf.WriteByte('[')
-	for i := 0; i < 3; i++ {
+	var arlen = rand.Intn(10)
+	for i := 0; i < arlen; i++ {
 		switch itemType {
 		case "string":
 			buf.WriteString(genString())
@@ -50,9 +77,14 @@ func genArray(itemType string) string {
 		case "bool":
 			buf.WriteString(genBool())
 			buf.WriteString(", ")
+		case "float":
+			buf.WriteString(genFloat())
+			buf.WriteString(", ")
 		}
 	}
-	buf.Truncate(buf.Len() - 2)
+	if arlen > 0 {
+		buf.Truncate(buf.Len() - 2)
+	}
 	buf.WriteByte(']')
 	return buf.String()
 }

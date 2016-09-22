@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+var generator valueGenerator
+
 func isNestedObjectFollows(spec string, start int) bool {
 	for j := start; j < len(spec); j++ {
 		if spec[j] == '{' {
@@ -35,7 +37,7 @@ func composeRequestBody(spec string) (string, error) {
 					i++
 					c = spec[i]
 					if c == ',' || c == '}' || c == '\n' {
-						v, err := genValue(typeBuf.String())
+						v, err := generator.genValue(typeBuf.String())
 						if err != nil {
 							return "", err
 						}
@@ -93,7 +95,6 @@ func parseResponseFields(spec string) ([]responseField, error) {
 	var n = 0
 	for n < len(spec) {
 		var token string
-		var err error
 		token, n = extractNextToken(spec, n)
 		token = strings.Trim(token, "\n\t ")
 		if strings.Index(token, "{") < 0 {
@@ -107,19 +108,17 @@ func parseResponseFields(spec string) ([]responseField, error) {
 			}
 		} else {
 			ind := strings.Index(token, ":")
-			if ind < 1 || ind > len(token)-3 {
+			objInd := strings.Index(token, "{")
+			if ind < 1 || ind > objInd {
 				return nil, errors.New("Parse error: object field definition must look like \"file\":{...}")
 			}
 			var fieldName = strings.Trim(token[0:ind], "\n\t ")
 			var nestedObj = strings.Trim(token[ind+1:], "\n\t ")
-			rf, nerr := parseResponseFields(nestedObj)
-			if nerr != nil {
-				return nil, errors.New("Parse error")
+			rf, err := parseResponseFields(nestedObj)
+			if err != nil {
+				return nil, err
 			}
-			result = append(result, responseField{fieldName, "Object", rf})
-		}
-		if err != nil {
-			println(err.Error())
+			result = append(result, responseField{fieldName, "object", rf})
 		}
 	}
 	return result, nil
