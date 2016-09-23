@@ -43,6 +43,24 @@ const (
     </api-def>
   </definitions>
 `
+	invalidXml = `<definitions>
+    <api>
+      <address method="GET">
+        http://localhost:8080/task
+      </address>
+      <parameters>
+        <param>
+          <name>id</name>
+          <value>0</value>
+        </param>
+        <param>
+          <name>alias</name>
+          <value>golang</value>
+        </param>
+      </parameters>
+    </api-def>
+  </definitions>
+`
 )
 
 func TestReading(t *testing.T) {
@@ -75,6 +93,15 @@ func TestReading(t *testing.T) {
 	}
 	for i, d := range expextedDefs {
 		compareAPIDefinitions(t, d, definitions[i])
+	}
+}
+
+func TestReadFromInvalidXml(t *testing.T) {
+	var source = strings.NewReader(invalidXml)
+	_, err := readDefinitionsFromReader(source)
+	// println(err.Error())
+	if err == nil {
+		t.Error("Error had to be raised, but was not")
 	}
 }
 

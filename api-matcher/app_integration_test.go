@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -25,10 +26,16 @@ func TestIntegrationWinEndpoint(t *testing.T) {
 		var logBuffer = bytes.NewBuffer(make([]byte, 0, 2048))
 		log.SetOutput(logBuffer)
 		generator = randValueGenerator{}
+		var callChain = make(chan apiCallDef, 100)
+		var waitGroup = &sync.WaitGroup{}
 		for _, d := range defs {
-			err := checkEndpoint(d)
-			logCall(d, err)
+			waitGroup.Add(1)
+			callChain <- d
 		}
+		for i := 0; i < 2; i++ {
+			startNewWorker(callChain, waitGroup)
+		}
+		waitGroup.Wait()
 		checkLog(t, logBuffer.Bytes(), len(defs))
 	}
 }
