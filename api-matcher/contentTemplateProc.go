@@ -1,8 +1,9 @@
 package main
 
 import (
-	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -20,7 +21,8 @@ func isNestedObjectFollows(spec string, start int) bool {
 }
 
 func composeRequestBody(spec string) (string, error) {
-	var jsonBuf bytes.Buffer
+	var jsonBuf = buffers.getBuffer()
+	defer buffers.returnBuffer(jsonBuf)
 	for i := 0; i < len(spec); {
 		c := spec[i]
 		if c != ':' {
@@ -31,7 +33,7 @@ func composeRequestBody(spec string) (string, error) {
 				jsonBuf.WriteByte(c)
 				i++
 			} else {
-				var typeBuf bytes.Buffer
+				var typeBuf = buffers.getBuffer()
 				jsonBuf.WriteByte(c)
 				for {
 					i++
@@ -49,6 +51,7 @@ func composeRequestBody(spec string) (string, error) {
 						typeBuf.WriteByte(c)
 					}
 				}
+				buffers.returnBuffer(typeBuf)
 			}
 		}
 	}
@@ -56,8 +59,9 @@ func composeRequestBody(spec string) (string, error) {
 }
 
 func extractNextToken(spec string, start int) (token string, end int) {
+	var tokenBuf = buffers.getBuffer()
+	defer buffers.returnBuffer(tokenBuf)
 	var depth = 0
-	var tokenBuf bytes.Buffer
 	if spec[start] == '{' {
 		for i := start + 1; i < len(spec); i++ {
 			c := spec[i]
@@ -91,7 +95,8 @@ func extractNextToken(spec string, start int) (token string, end int) {
 }
 
 func parseResponseFields(spec string) ([]responseField, error) {
-	var result []responseField
+	var result = buffers.getFieldSlice()
+	defer buffers.returnFieldSlice(result)
 	var n = 0
 	for n < len(spec) {
 		var token string
@@ -124,7 +129,70 @@ func parseResponseFields(spec string) ([]responseField, error) {
 	return result, nil
 }
 
-func checkResponseAgainstExpectedFields(content string, expectedFields []responseField) (bool, error) {
+func checkResponseAgainstExpectedFields(content []byte, expectedFields []responseField) (bool, error) {
+	var data interface{}
+	err := json.Unmarshal(content, &data)
+	if err != nil {
+		return false, err
+	}
+	var fieldMaps []map[string]interface{}
+	switch v := data.(type) {
+	case map[string]interface{}:
+		fieldMaps = make([]map[string]interface{}, 1, 1)
+		fieldMaps[0] = v
+	case []map[string]interface{}:
+		fieldMaps = v
+	case []interface{}:
+		fieldMaps = make([]map[string]interface{}, len(v), len(v))
+		for i, in := range v {
+			fieldMaps[i] = in.(map[string]interface{})
+		}
+	}
+	for _, fm := range fieldMaps {
+		for _, rf := range expectedFields {
+			val, found := fm[rf.name]
+			if !found && rf.name[0] == '"' { // if expected field is quoted, then try to remove quotes
+				val, found = fm[rf.name[1:len(rf.name)-1]]
+			}
+			if !found {
+				return false, fmt.Errorf("Expected field %s not found", rf.name)
+			}
+			switch val.(type) {
+			case string:
+				if rf.typ != typeString {
+					return false, fmt.Errorf("Field %s has wrong type, expected %s", rf.name, typeString)
+				}
+			case int:
+				if rf.typ != typeInt {
+					return false, fmt.Errorf("Field %s has wrong type, expected %s", rf.name, typeInt)
+				}
+			case bool:
+				if rf.typ != typeBool {
+					return false, fmt.Errorf("Field %s has wrong type, expected %s", rf.name, typeBool)
+				}
+			case float32:
+				if rf.typ != typeFloat {
+					return false, fmt.Errorf("Field %s has wrong type, expected %s", rf.name, typeFloat)
+				}
+			case []string:
+				if rf.typ != typeStringArray {
+					return false, fmt.Errorf("Field %s has wrong type, expected %s", rf.name, typeStringArray)
+				}
+			case []int:
+				if rf.typ != typeIntArray {
+					return false, fmt.Errorf("Field %s has wrong type, expected %s", rf.name, typeIntArray)
+				}
+			case []bool:
+				if rf.typ != typeBoolArray {
+					return false, fmt.Errorf("Field %s has wrong type, expected %s", rf.name, typeBoolArray)
+				}
+			case []float32:
+				if rf.typ != typeFloatArray {
+					return false, fmt.Errorf("Field %s has wrong type, expected %s", rf.name, typeFloatArray)
+				}
+			}
+		}
+	}
 	// TODO: Implement algorithm that chacks that JSON has fields of specified type (perhaps, in the psecified order)
 	return true, nil
 }

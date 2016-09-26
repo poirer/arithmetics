@@ -26,6 +26,7 @@ func TestIntegrationWinEndpoint(t *testing.T) {
 		var logBuffer = bytes.NewBuffer(make([]byte, 0, 2048))
 		log.SetOutput(logBuffer)
 		generator = randValueGenerator{}
+		buffers = newBufferPool()
 		var callChain = make(chan apiCallDef, 100)
 		var waitGroup = &sync.WaitGroup{}
 		for _, d := range defs {

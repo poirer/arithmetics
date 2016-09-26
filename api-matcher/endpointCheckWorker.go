@@ -56,30 +56,32 @@ func (cw *checkWorker) checkEndpoint(def apiCallDef) error {
 	if response.StatusCode != def.Status {
 		return fmt.Errorf("Response status (%d) code is not equal to expected (%d)", response.StatusCode, def.Status)
 	}
-	if !def.SkipRespVerification {
+	if !def.Response.SkipVerification {
 		bodyContent, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			println("Error occurred while trying to read response")
 			return err
 		}
-		if len(def.ResponseBodyTpl) > 0 && len(bodyContent) == 0 {
+		if len(def.Response.BodyTpl) > 0 && len(bodyContent) == 0 {
 			return errors.New("Response body expected but was not received")
 		}
-		if len(def.ResponseBodyTpl) == 0 && len(bodyContent) > 0 {
+		if len(def.Response.BodyTpl) == 0 && len(bodyContent) > 0 {
 			return errors.New("Response body not expected but was received")
 		}
-		expectedFields, err := parseResponseFields(def.ResponseBodyTpl)
-		if err != nil {
-			println("Error occurred when trying to parse expected fields: ", err.Error())
-			return err
-		}
-		correct, err := checkResponseAgainstExpectedFields(string(bodyContent), expectedFields)
-		if err != nil {
-			println("Error occurred when verifying response body: ", err.Error())
-			return err
-		}
-		if !correct {
-			return errors.New("Server response does not match to expectation")
+		if def.Response.Format == "json" {
+			expectedFields, err := parseResponseFields(def.Response.BodyTpl)
+			if err != nil {
+				println("Error occurred when trying to parse expected fields: ", err.Error())
+				return err
+			}
+			correct, err := checkResponseAgainstExpectedFields(bodyContent, expectedFields)
+			if err != nil {
+				println("Error occurred when verifying response body: ", err.Error())
+				return err
+			}
+			if !correct {
+				return errors.New("Server response does not match to expectation")
+			}
 		}
 	}
 	return nil

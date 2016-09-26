@@ -30,9 +30,18 @@ func readDefinitionsFromReader(source io.Reader) ([]apiCallDef, error) {
 		return nil, err
 	}
 	for i := 0; i < len(defList.DefList); i++ {
-		trimFields(&defList.DefList[i])
+		trimAPIDefFileds(&defList.DefList[i])
 	}
 	return defList.DefList, nil
+}
+
+func trimAPIDefFileds(def *apiCallDef) {
+	trimFields(def)
+	trimFields(&def.Address)
+	trimFields(&def.Response)
+	for i := 0; i < len(def.Params); i++ {
+		trimFields(&def.Params[i])
+	}
 }
 
 func castToType(variable interface{}) interface{} {
@@ -43,10 +52,8 @@ func castToType(variable interface{}) interface{} {
 		return t
 	case *formParam:
 		return t
-	case reqAddr:
-		return &t
-	case formParam:
-		return &t
+	case *response:
+		return t
 	default:
 		fmt.Printf("Unexpected type %T\n", variable)
 		return t
@@ -61,21 +68,7 @@ func trimFields(dataToTrim interface{}) {
 	reflectData := reflect.ValueOf(typedData).Elem()
 	for i := 0; i < reflectData.NumField(); i++ {
 		field := reflectData.Field(i)
-		if field.Type().Kind() == reflect.Ptr {
-			innerStruct := castToType(field.Interface())
-			trimFields(innerStruct)
-		} else if field.Type().Kind() == reflect.Slice {
-			for j := 0; j < field.Len(); j++ {
-				fieldAtIndex := field.Index(j)
-				if fieldAtIndex.Type().Kind() == reflect.Struct {
-					innerElement := castToType(fieldAtIndex.Interface())
-					trimFields(innerElement)
-				} else if fieldAtIndex.Type().Kind() == reflect.String {
-					var trimmedString = strings.Trim(fieldAtIndex.String(), "\n\t ")
-					fieldAtIndex.SetString(trimmedString)
-				}
-			}
-		} else if field.Type().Kind() == reflect.String {
+		if field.Type().Kind() == reflect.String {
 			if field.CanSet() {
 				var trimmedString = strings.Trim(field.String(), "\n\t ")
 				field.SetString(trimmedString)

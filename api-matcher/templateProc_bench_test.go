@@ -3,20 +3,25 @@ package main
 import "testing"
 
 func BenchmarkComposingFromInvalidTemplate(b *testing.B) {
+	b.ReportAllocs()
 	generator = randValueGenerator{}
+	buffers = newBufferPool()
 	for i := 0; i < b.N; i++ {
-		_, err := composeRequestBody(taskJSONSpec)
-		if err != nil {
-			b.Error("Error in benchmark", err)
-		}
+		composeRequestBody(taskJSONSpec)
 	}
 }
 
 func BenchmarkFieldParser(b *testing.B) {
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		_, err := parseResponseFields(taskJSONSpec)
-		if err != nil {
-			b.Error("Error in benchmark", err)
-		}
+		parseResponseFields(taskJSONSpec)
+	}
+}
+
+func BenchmarkTrimViaReflection(b *testing.B) {
+	b.ReportAllocs()
+	var d = createObjectToTrim()
+	for i := 0; i < b.N; i++ {
+		trimAPIDefFileds(&d)
 	}
 }

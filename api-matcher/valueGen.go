@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"math"
 	"math/rand"
@@ -24,13 +23,13 @@ func (randValueGenerator) genValue(typeStr string) (string, error) {
 		return genArray(typeStr), nil
 	}
 	switch typeStr {
-	case "string":
+	case typeString:
 		return genString(), nil
-	case "int":
+	case typeInt:
 		return genInt(), nil
-	case "bool":
+	case typeBool:
 		return genBool(), nil
-	case "float":
+	case typeFloat:
 		return genFloat(), nil
 	default:
 		return "", errors.New("Unsupported type <" + typeStr + ">")
@@ -38,9 +37,10 @@ func (randValueGenerator) genValue(typeStr string) (string, error) {
 }
 
 func genString() string {
+	var strBuf = buffers.getBuffer()
+	defer buffers.returnBuffer(strBuf)
 	const charSet = "abcdefghijklmnopqrstuvwxyz "
 	var l = rand.Intn(24)
-	var strBuf bytes.Buffer
 	strBuf.WriteByte('"')
 	for i := 0; i < l; i++ {
 		strBuf.WriteByte(charSet[rand.Intn(len(charSet))])
@@ -63,21 +63,22 @@ func genFloat() string {
 }
 
 func genArray(itemType string) string {
-	var buf bytes.Buffer
+	var buf = buffers.getBuffer()
+	defer buffers.returnBuffer(buf)
 	buf.WriteByte('[')
 	var arlen = rand.Intn(10)
 	for i := 0; i < arlen; i++ {
 		switch itemType {
-		case "string":
+		case typeString:
 			buf.WriteString(genString())
 			buf.WriteString(", ")
-		case "int":
+		case typeInt:
 			buf.WriteString(genInt())
 			buf.WriteString(", ")
-		case "bool":
+		case typeBool:
 			buf.WriteString(genBool())
 			buf.WriteString(", ")
-		case "float":
+		case typeFloat:
 			buf.WriteString(genFloat())
 			buf.WriteString(", ")
 		}

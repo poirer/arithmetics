@@ -5,6 +5,18 @@ import (
 	"sync"
 )
 
+const (
+	typeString      = "string"
+	typeInt         = "int"
+	typeBool        = "bool"
+	typeFloat       = "float"
+	typeStringArray = "[string]"
+	typeIntArray    = "[int]"
+	typeBoolArray   = "[bool]"
+	typeFloatArray  = "[float]"
+	typeObject      = "object"
+)
+
 type (
 	responseField struct {
 		name      string
@@ -22,22 +34,31 @@ type (
 		Method string `xml:"method,attr"`
 	}
 
+	response struct {
+		BodyTpl          string `xml:"template"`
+		SkipVerification bool   `xml:"skip-verification,attr"`
+		Format           string `xml:"format,attr"`
+	}
+
 	apiDefList struct {
 		DefList []apiCallDef `xml:"api-def"`
 	}
 
 	apiCallDef struct {
-		RequestBodyTpl       string      `xml:"request-body-template"`
-		Address              *reqAddr    `xml:"address"` // Declare it as a pointer is the only way to trim values using reflection, that I have found
-		ResponseBodyTpl      string      `xml:"response-body-template"`
-		SkipRespVerification bool        `xml:"skip-response-verification"`
-		Status               int         `xml:"status"`
-		Params               []formParam `xml:"parameters>param"`
+		RequestBodyTpl string      `xml:"request-body-template"`
+		Address        reqAddr     `xml:"address"`
+		Response       response    `xml:"response"`
+		Status         int         `xml:"status"`
+		Params         []formParam `xml:"parameters>param"`
+		JSONInResponse bool        `xml:"json-in-response"`
 	}
 )
 
+var buffers objectPool
+
 func main() {
 	generator = randValueGenerator{}
+	buffers = newBufferPool()
 	defs, err := readAPICallDefinitions("endpoints.xml")
 	if err != nil {
 		log.Fatal("Error occurred: ", err.Error())

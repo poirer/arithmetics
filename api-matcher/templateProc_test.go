@@ -42,6 +42,7 @@ const (
 
 func ExampleComposeRequestBody() {
 	generator = testGenerator{}
+	buffers = newBufferPool()
 	res, err := composeRequestBody(taskJSONSpec)
 	if err != nil {
 		println(err.Error())
@@ -68,6 +69,7 @@ func ExampleComposeRequestBody() {
 
 func TestComposingFromInvalidTemplate(t *testing.T) {
 	generator = randValueGenerator{}
+	buffers = newBufferPool()
 	_, err := composeRequestBody(invalidFieldTypeSpec)
 	if err == nil {
 		t.Error("Error expected")
