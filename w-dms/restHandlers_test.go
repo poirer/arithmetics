@@ -100,6 +100,10 @@ func (dm *dbDriverMock) Close() error {
 	return nil
 }
 
+func (dm *dbDriverMock) Init() error {
+	return nil
+}
+
 func createRequest(method, body string, parameters map[string]string) (*http.Request, error) {
 	var reader io.Reader = strings.NewReader(body)
 	var form = make(url.Values)

@@ -47,8 +47,13 @@ type (
 		Close() error
 	}
 
+	autoInitDbStructure interface {
+		Init() error
+	}
+
 	closeableDbDriver interface {
 		dbDriver
+		autoInitDbStructure
 		closeable
 	}
 )
@@ -66,11 +71,18 @@ func main() {
 	case "sqlite":
 		log.Println("Using sqlite")
 		db = newSqliteDriver("tasks.db")
+	case "cassandra":
+		log.Println("Using cassandra")
+		db = newCassandraDriver("tasks")
 	default:
 		log.Println("Using default (mongo)")
 		db = newMongoDriver("Tasks")
 	}
 	defer db.Close()
+	err := db.Init()
+	if err != nil {
+		log.Println("Could not initialize database structure, trying to continue", err.Error())
+	}
 	var sm = http.NewServeMux()
 	sm.HandleFunc("/task", dispatchTaskRequest)
 	swaggerDoc := http.FileServer(http.Dir("swagger-ui"))

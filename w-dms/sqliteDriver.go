@@ -1,22 +1,25 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
+	"io/ioutil"
 	"log"
+	"os"
 	"strconv"
 )
 
 const (
-	insertClause = `insert into Tasks(alias, description, type_id, task_timestamp, estimate_time, real_time)
+	sqliteInsertClause = `insert into Tasks(alias, description, type_id, task_timestamp, estimate_time, real_time)
  values(?, ?, ?, ?, ?, ?)`
 
-	selectCaluse = `select t.id, t.alias, t.description, t.task_timestamp, t.estimate_time, t.real_time, ty.type, r.reminder, ta.tag
+	sqliteSelectCaluse = `select t.id, t.alias, t.description, t.task_timestamp, t.estimate_time, t.real_time, ty.type, r.reminder, ta.tag
 from Tasks t
 inner join Types ty on t.type_id = ty.id
 left join Tags ta on ta.task_id = t.id
 left join Reminders r on r.task_id = t.id`
 
-	updateClause = `update Tasks
+	sqliteUpdateClause = `update Tasks
 set alias = ?,
     description = ?,
     type_id = ?,
@@ -34,7 +37,7 @@ type sqliteDriver struct {
 func newSqliteDriver(dbURL string) *sqliteDriver {
 	db, err := sql.Open("sqlite3", dbURL)
 	if err != nil {
-		log.Fatal("Cannot connect to database", err)
+		log.Fatal("Cannot connect to database: ", err)
 	}
 	return &sqliteDriver{db}
 }
@@ -56,7 +59,7 @@ func (d *sqliteDriver) Create(t Task) error {
 	if err != nil {
 		return err
 	}
-	res, err := transaction.Exec(insertClause, t.Alias, t.Description, typeID, t.Timestamp, t.EstimateTime, t.RealTime)
+	res, err := transaction.Exec(sqliteInsertClause, t.Alias, t.Description, typeID, t.Timestamp, t.EstimateTime, t.RealTime)
 	if err != nil {
 		return err
 	}
@@ -111,7 +114,7 @@ func (d *sqliteDriver) Update(t Task) error {
 	if err != nil {
 		return err
 	}
-	res, err := transaction.Exec(updateClause, t.Alias, t.Description, typeID, t.Timestamp, t.EstimateTime, t.RealTime, t.ID)
+	res, err := transaction.Exec(sqliteUpdateClause, t.Alias, t.Description, typeID, t.Timestamp, t.EstimateTime, t.RealTime, t.ID)
 	if err != nil {
 		return err
 	}
@@ -219,7 +222,7 @@ func (d *sqliteDriver) readByCondition(condition string, args ...interface{}) (T
 	var taskMap = make(map[int]*Task, 0)
 	var rows *sql.Rows
 	var err error
-	rows, err = d.db.Query(selectCaluse+" "+condition, args...)
+	rows, err = d.db.Query(sqliteSelectCaluse+" "+condition, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -267,6 +270,29 @@ func (d *sqliteDriver) readByCondition(condition string, args ...interface{}) (T
 
 func (d *sqliteDriver) Close() error {
 	return d.db.Close()
+}
+
+func (d *sqliteDriver) Init() error {
+	scriptFile, err := os.Open("sqlite-script.sql")
+	if err != nil {
+		return err
+	}
+	defer scriptFile.Close()
+	scripts, err := ioutil.ReadAll(scriptFile)
+	if err != nil {
+		return err
+	}
+	clauses := bytes.Split(scripts, []byte{';'})
+	for i := 0; i < len(clauses); i++ {
+		clause := bytes.TrimFunc(clauses[i], func(r rune) bool { return r == '\n' || r == '\t' || r == ' ' })
+		if len(clause) > 0 {
+			_, err := d.db.Exec(string(clause))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func addToSliceIfAbsent(slice *[]string, value string) {

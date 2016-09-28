@@ -15,7 +15,7 @@ type mongoDriver struct {
 func newMongoDriver(dbName string) *mongoDriver {
 	mongoSession, err := mgo.Dial("localhost")
 	if err != nil {
-		log.Fatal("Cannot connect to mongo database", err)
+		log.Fatal("Cannot connect to mongo database: ", err)
 	}
 	return &mongoDriver{mongoSession, dbName}
 }
@@ -83,11 +83,23 @@ func (d *mongoDriver) Update(t Task) error {
 
 func (d *mongoDriver) Delete(t Task) error {
 	var c = d.getTasksC()
-	return c.RemoveId(bson.ObjectIdHex(t.ID.(string)))
+	var strID = t.ID.(string)
+	if len(strID) != 12 {
+		return errInvalidID
+	}
+	err := c.RemoveId(bson.ObjectIdHex(strID))
+	if err == mgo.ErrNotFound {
+		return errTaskNotFound
+	}
+	return err
 }
 
 func (d *mongoDriver) Close() error {
 	d.session.Close()
+	return nil
+}
+
+func (d *mongoDriver) Init() error {
 	return nil
 }
 
