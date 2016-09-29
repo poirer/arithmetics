@@ -15,12 +15,21 @@ const (
 	casInsertClause = `insert into Tasks(id, alias, description, type_id, task_timestamp, estimate_time, real_time, reminders)
   values(?, ?, ?, ?, ?, ?, ?, ?)`
 	casDeleteClause = "delete from Tasks where id = ?"
-
+	casUpdateClause = `update Tasks
+      set alias = ?,
+      description = ?,
+      type_id = ?,
+      task_timestamp = ?,
+      estimate_time = ?,
+      real_time = ?,
+      reminders = ?
+    where id = ?`
 	casSelectClause = `select id, alias, description, type_id, task_timestamp, estimate_time, real_time, reminders from Tasks`
 
-	casSelectTagsClause = "select tag from Tags where task_id = ?"
-	casInsertTagClause  = "insert into Tags(id, task_id, tag) values(uuid(), ?, ?)"
-	casDeleteTagsClause = "delete from Tags where id = ?"
+	casSelectTagNamesClause = "select tag from Tags where task_id = ?"
+	casSelectTagIDsClause   = "select id from Tags where task_id = ?"
+	casInsertTagClause      = "insert into Tags(id, task_id, tag) values(uuid(), ?, ?)"
+	casDeleteTagsClause     = "delete from Tags where id = ?"
 
 	casSelectTypeByNameClause = `select id from Types where type = ?`
 	casSelectTypeByIDClause   = `select type from Types where id = ?`
@@ -60,11 +69,7 @@ func (d *cassandraDriver) Create(t Task) error {
 	if err != nil {
 		return err
 	}
-	tagBatch := d.session.NewBatch(gocql.LoggedBatch)
-	for _, tag := range t.Tags {
-		tagBatch.Query(casInsertTagClause, taskUUID, tag)
-	}
-	err = d.session.ExecuteBatch(tagBatch)
+	err = d.insertTaskTags(taskUUID, t.Tags)
 	if err != nil {
 		_ = d.session.Query(casDeleteTagsClause, taskUUID).Exec()
 		return err
@@ -87,24 +92,32 @@ func (d *cassandraDriver) ReadByAlias(alias *string) (TaskList, error) {
 }
 
 func (d *cassandraDriver) Update(t Task) error {
-	return nil
+	typeID, err := d.findOrInsertType(t.Type)
+	if err != nil {
+		return err
+	}
+	d.session.Query(casUpdateClause, t.Alias, t.Description, typeID, t.Timestamp, t.EstimateTime, t.RealTime, t.Reminders, t.ID).Exec()
+	taskID, err := gocql.ParseUUID(t.ID.(string))
+	if err != nil {
+		return err
+	}
+	err = d.deleteTaskTags(taskID)
+	if err != nil {
+		return err
+	}
+	return d.insertTaskTags(taskID, t.Tags)
 }
 
 func (d *cassandraDriver) Delete(t Task) error {
 	if t.ID == nil {
 		return errMissingID
 	}
-	tagIt := d.session.Query(casDeleteTagsClause, t.ID).Iter()
-	// Just couldn't delete all tags in one statement
-	var tagID gocql.UUID
-	for tagIt.Scan(&tagID) {
-		err := d.session.Query(casDeleteTagsClause, tagID).Exec()
-		if err != nil {
-			return err
-		}
+	taskID, err := gocql.ParseUUID(t.ID.(string))
+	if err != nil {
+		return err
 	}
-	err := tagIt.Close()
-	if err != nil && err != gocql.ErrNotFound {
+	err = d.deleteTaskTags(taskID)
+	if err != nil {
 		return err
 	}
 	return d.session.Query(casDeleteClause, t.ID).Exec()
@@ -157,7 +170,7 @@ func (d *cassandraDriver) selectTasksByCondition(condition string, args ...inter
 	var id, typeID gocql.UUID
 	var alias, desc, eTime, rTime string
 	var ts int64
-	var reminders []string // = make([]string, 0, 10)
+	var reminders []string
 	var selectError error
 	resultIt := d.session.Query(casSelectClause+" "+condition, args...).Iter()
 	var tasks = TaskList{}
@@ -171,7 +184,7 @@ func (d *cassandraDriver) selectTasksByCondition(condition string, args ...inter
 		}
 		t.Type = typeName
 		var tag string
-		tagIt := d.session.Query(casSelectTagsClause, id).Iter()
+		tagIt := d.session.Query(casSelectTagNamesClause, id).Iter()
 		for tagIt.Scan(&tag) {
 			t.Tags = append(t.Tags, tag)
 		}
@@ -187,4 +200,25 @@ func (d *cassandraDriver) selectTasksByCondition(condition string, args ...inter
 		return nil, selectError
 	}
 	return tasks, nil
+}
+
+func (d *cassandraDriver) deleteTaskTags(taskID gocql.UUID) error {
+	tagIt := d.session.Query(casSelectTagIDsClause, taskID).Iter()
+	// Just couldn't delete all tags in one statement
+	var tagID gocql.UUID
+	for tagIt.Scan(&tagID) {
+		err := d.session.Query(casDeleteTagsClause, tagID).Exec()
+		if err != nil {
+			return err
+		}
+	}
+	return tagIt.Close()
+}
+
+func (d *cassandraDriver) insertTaskTags(taskID gocql.UUID, tags []string) error {
+	tagBatch := d.session.NewBatch(gocql.LoggedBatch)
+	for _, tag := range tags {
+		tagBatch.Query(casInsertTagClause, taskID, tag)
+	}
+	return d.session.ExecuteBatch(tagBatch)
 }
